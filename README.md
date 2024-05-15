@@ -7,3 +7,5 @@ Feel free to use this for educational purposes in learning R and various persona
 Please do not copy this project and claim it as your own.
 
 Full analysis is included in the RMarkdown and HTML file.
+
+I recommend opening the HTML file in your browser to get an optimal look at the tables and graphs in this analysis.
