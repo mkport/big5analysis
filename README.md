@@ -6,4 +6,4 @@ Feel free to use this for educational purposes in learning R and various persona
 
 Please do not copy this project and claim it as your own.
 
-Full analysis is included in the RMarkdown file.
+Full analysis is included in the RMarkdown and HTML file.
