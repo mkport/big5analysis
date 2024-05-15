@@ -1,0 +1,1085 @@
+---
+title: "Final Project"
+author: "Name"
+date: "2024-04-20"
+output: html_document
+---
+## Introduction
+
+I have been interested in various personality tests for quite some time. This interest grew as I took classes for my Psych minor and saw how tests may be applied to detect certain conditions and help patients. For this project, I wanted to explore one of these tests in detail and compare it to other tests. All of the information about the tests I will be sharing I have picked up over the years I have been studying them. 
+
+The main personality test I will be investigating is the Big Five Personality Test. This test explores people's levels of Extroversion, Emotional Stability, Conscientiousness, Agreeableness, and Openness to Experience. Here is a breakdown of what low and high levels of each trait are referred to:
+
+|  Trait|  Low|  High|
+|:--|:--|:--|
+|  Extroversion|  Reserved|  Social|
+|  Emotional Stability|  Limbic|  Calm|
+|  Conscientiousness|  Unorganized|  Organized|
+|  Agreeableness|  Egocentric|  Agreeable|
+|  Openness|  Non-Curious|  Imaginative|
+ 
+
+When a person takes a Big Five Personality Test, their Big Five Type is usually given as a five-letter code that corresponds to the first letter of each of the five results. For example, if someone is social, calm, unorganized, egocentric, and non-curious, their Big Five Type would be SCUEN.
+
+Most people end up in the middle of the five scales and may fluctuate positions based on their current situation and feelings.
+
+The Big Five Personality Test has a few applications in psychology. A professional may ask their patient to take this test, and the results give insight on a condition they may have. For example, a Limbic patient may have a tendency to be anxious, and an Egocentric patient may have narcissistic tendencies. However, while the Big Five Personality Test may give information about a patient, the results should be taken with a grain of salt. The professional should use their expertise to help the patient without using the test as a crutch. 
+
+## Project Goals
+
+My first goal in this project is to see how Big Five Traits are related to each other. For example, is a low level of Agreeableness related to a low level of Openness?
+
+In addition, I also want to see how other personality test results relate to Big Five Traits. One of the tests is the MBTI (or 16Personalities) test, where people get a 4-letter code to refer to their type, such as ESFP or INTJ. A question I can explore with these two tests is how different levels of Extroversion relate to someone's MBTI type. As different personality tests come up in my project, I will explain them in a beginner-friendly way.
+
+I will also be comparing my datasets to each other and analyzing differences between them.
+
+## About the Data
+
+The first dataset I will be using is a collection of people's answers to an online Big Five Personality Test from Open Psychometrics (https://openpsychometrics.org/tests/IPIP-BFFM/). I originally found the data on Kaggle (https://www.kaggle.com/datasets/tunguz/big-five-personality-test). I will be using this data to explore my first project goal. A big part of this will include scoring the quiz results to give each participant a five-leter personality type such as SCUEN, etc.
+
+The first 50 columns correspond to the 50 questions in the quiz. 10 questions correspond to each of the five personality characteristics. The values in these columns are 1-5, 1 being strongly disagree, 3 neutral, and 5 being strongly agree (0 means the question was skipped). The next 50 columns describe how much time the person took on each of the questions. Then, there are variables for the person's screen size, how many times the IP was used to take a quiz, their country, and predicted longitude and latitude. I will include a txt file of the questions in the quiz with the project.
+
+The second dataset is one that I have collected myself over a year ago. It is a collection of characters from Personality Database (PDB) (https://www.personality-database.com/). On this website, users vote for characters' various personality types based on the media they come from. I will use this data to see the possible connections between different personality tests. 
+
+This dataset includes the characters' names, and their various personality types for personality tests: MBTI, Enneagram, Instinctual Variant, Tritype, Socionics, Attitudinal Psyche, Temperament, Classic Jungian, and, of course, Big Five Type.
+
+## Let's Start Cleaning the First Dataset!
+
+This proved to be trickier than I thought because of the size of the dataset; there are over one million rows! My first strategy was to download the csv from Kaggle and download it into the files for this project. However, this did not work; I couldn't open the file in Google Sheets, Excel, or RStudio. My next method was to use the url like we learned in class. Unfortunately that did not work because RStudio automatically compressed the csv into a zip file, and was unable to retrieve the csv from it. With some research, I found the `downloader` package. With this package, I was able to download the zip file, unzip it, and retrieve the csv file. Please note that due to the size of the csv, it will take a bit of time to load into RStudio.
+```{r setup, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(vroom)
+library(downloader)
+library(here)
+library(RColorBrewer)
+library(patchwork)
+library(flextable)
+```
+
+```{r read zip file, echo=FALSE}
+download("https://openpsychometrics.org/_rawdata/IPIP-FFM-data-8Nov2018.zip", dest="bigfive.zip", mode="wb")
+unzip("bigfive.zip", exdir = "./")
+big_five_data <- read.table(here("IPIP-FFM-data-8Nov2018", "data-final.csv"), sep = "\t", header = TRUE,
+           encoding = "UTF-8", stringsAsFactors = FALSE, quote = "")
+```
+
+From here, I made the decision to take a sample from the data instead of working with the entire dataset. I made this decision for a couple of reasons. First, the dataset is incredibly large and takes some time to load in; the wait times may increase the more columns I add. Second, my goal for this analysis is not to summarise the quiz results, but rather, make conclusions based on the results. I felt comfortable taking a sample due to the Strong Law of Large Numbers. After taking the sample, I filtered to drop rows without a country and included rows where the IPC is equal to 1 because this means the IP address was used once to take the quiz. Next, I made the skipped questions (equal to 0) NAs in the data.
+
+```{r select sample from big_five_data, drop irrelevant columns, convert some to numeric, echo=FALSE}
+set.seed(429)
+big_five_clean <- big_five_data |>
+  filter(
+    IPC == 1,
+    country != "NONE"
+  ) |>
+  sample_n(500) |>
+  select(EXT1:OPN10, country) |>
+  mutate(
+    across(
+      EXT1:OPN10, ~as.numeric(.x)
+    )
+  )
+
+big_five_clean <- big_five_clean |>
+  mutate(
+    across(
+      EXT1:OPN10, ~na_if(.x, 0)
+    )
+  )
+  
+```
+
+The next step is to make the answers on the same scale. In these types of quizzes, questions are written in various ways in order to get a more accurate picture of what the person thinks. For example, in this quiz, one of the questions is "I am the life of the party," and another is "I don't talk a lot." The first question is positive while the second is negative. If someone is extraverted, they are more likely to agree with the first statement (say 4 or 5) and disagree with the second (say 1 or 2). We need to rescore the negative statements so that they are on the same scale as the positive statements, and so we can later find the mean of the responses. With the rescale, you can interpret the negative statement as "I talk a lot." For the rescaled questions, 1 turned into 5, 2 into 4, and vice versa. 
+
+```{r convert "negative questions" columns to new values ext, echo=FALSE}
+# 1 = 5, 2 = 4, 3 = 3
+# Extroversion
+big_five_clean <- big_five_clean |>
+  mutate(
+    across(
+      c("EXT2", "EXT4", "EXT6", "EXT8", "EXT10"),
+      ~ case_when(
+        .x == 1 ~ 5,
+        .x == 2 ~ 4,
+        .x == 4 ~ 2,
+        .x == 5 ~ 1,
+        .default = .x
+      )
+    )
+  )
+```
+
+```{r convert "negative questions" columns to new values est, echo=FALSE}
+# Emotional Stability
+big_five_clean <- big_five_clean |>
+  mutate(
+    across(
+      c("EST1", "EST3", "EST5":"EST10"),
+      ~ case_when(
+        .x == 1 ~ 5,
+        .x == 2 ~ 4,
+        .x == 4 ~ 2,
+        .x == 5 ~ 1,
+        .default = .x
+      )
+    )
+  )
+```
+
+```{r convert "negative questions" columns to new values agr, echo=FALSE}
+# Agreeableness
+big_five_clean <- big_five_clean |>
+  mutate(
+    across(
+      c("AGR1", "AGR3", "AGR5", "AGR7"),
+      ~ case_when(
+        .x == 1 ~ 5,
+        .x == 2 ~ 4,
+        .x == 4 ~ 2,
+        .x == 5 ~ 1,
+        .default = .x
+      )
+    )
+  )
+```
+
+```{r convert "negative questions" columns to new values csn, echo=FALSE}
+# Conscientiousness
+big_five_clean <- big_five_clean |>
+  mutate(
+    across(
+      c("CSN2", "CSN4", "CSN6", "CSN8"),
+      ~ case_when(
+        .x == 1 ~ 5,
+        .x == 2 ~ 4,
+        .x == 4 ~ 2,
+        .x == 5 ~ 1,
+        .default = .x
+      )
+    )
+  )
+```
+
+```{r convert "negative questions" columns to new values opn, echo=FALSE}
+# Openness to Experience
+big_five_clean <- big_five_clean |>
+  mutate(
+    across(
+      c("OPN2", "OPN4", "OPN6"),
+      ~ case_when(
+        .x == 1 ~ 5,
+        .x == 2 ~ 4,
+        .x == 4 ~ 2,
+        .x == 5 ~ 1,
+        .default = .x
+      )
+    )
+  )
+```
+
+With our rescaling, we can now find the mean of each of the five traits.
+
+```{r calculate ext_mean, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(
+    ext_mean = rowMeans(across(EXT1:EXT10), na.rm=TRUE)
+  )
+```
+
+```{r calculate est_mean, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(
+    est_mean = rowMeans(across(EST1:EST10), na.rm=TRUE)
+  )
+```
+
+```{r calculate agr_mean, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(
+    agr_mean = rowMeans(across(AGR1:AGR10), na.rm=TRUE)
+  )
+```
+
+```{r calculate csn_mean, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(
+    csn_mean = rowMeans(across(CSN1:CSN10), na.rm=TRUE)
+  )
+```
+
+```{r calculate opn_mean, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(
+    opn_mean = rowMeans(across(OPN1:OPN10), na.rm=TRUE)
+  )
+```
+
+Now that we have our means, we can score each participant with low or high levels of the five traits, such as being reserved or social. A low level would have a mean less than 3, a high level would have a mean greater than 3. If someone has a mean of exactly 3, they will get 'x'.
+
+```{r create `ext_result` column, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(ext_result = case_when(
+    ext_mean > 3 ~ "social",
+    ext_mean < 3 ~ "reserved",
+    .default = "x"
+  )
+  )
+```
+
+```{r create `est_result` column, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(est_result = case_when(
+    est_mean > 3 ~ "calm",
+    est_mean < 3 ~ "limbic",
+    .default = "x"
+  )
+  )
+```
+
+```{r create `agr_result` column, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(agr_result = case_when(
+    agr_mean > 3 ~ "agreeable",
+    agr_mean < 3 ~ "egocentric",
+    .default = "x"
+  )
+  )
+```
+
+```{r create `csn_result` column, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(csn_result = case_when(
+    csn_mean > 3 ~ "organized",
+    csn_mean < 3 ~ "unorganized",
+    .default = "x"
+  )
+  )
+```
+
+```{r create `opn_result` column, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(opn_result = case_when(
+    opn_mean > 3 ~ "imaginative",
+    opn_mean < 3 ~ "non-curious",
+    .default = "x"
+  )
+  )
+```
+
+With our current information, we can now give each participant their corresponding five-letter type.
+
+```{r create `big_five_type` column, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  mutate(
+        big_five_type = toupper(str_c(str_extract(ext_result, "^[a-z]"), str_extract(est_result, "^[a-z]"),
+                                  str_extract(csn_result, "^[a-z]"), str_extract(agr_result, "^[a-z]"),
+                                  str_extract(opn_result, "^[a-z]")))
+  )
+```
+
+It is time to select our needed columns and save the cleaned data as a csv. I will drop the 50 question columns because we found the mean. In my sample, there was also a row with all NAs, so I will be dropping it.
+
+```{r select needed columns and save as csv, echo=FALSE}
+big_five_clean <- big_five_clean |>
+  select(country, big_five_type, ext_mean:opn_result) |>
+  # get rid of row full of all NAs
+  filter(
+    big_five_type != "XXXXX"
+  )
+
+big_five_clean.csv <- write_csv(big_five_clean, "big_five_clean.csv")
+```
+
+## Quiz Dataset Analysis
+
+The data includes participants' country, so I thought that I could investigate this further, such as whether there was a trend in responses. However, upon further inspection, almost half of the respondents were from the US, so I didn't think I needed to do further research. 
+
+```{r explore countries, echo=FALSE}
+big_five_clean |>
+  group_by(country) |>
+  count() |>
+  arrange(desc(n)) |>
+  head(5) |>
+  flextable()
+```
+
+Now, let's see the top 7 five-letter results from my sample. I would like to note that I used the reorder() function instead of the method we used in class where we make the variable a factor and order based on that; the latter was not working for me, so I found the reorder() method instead.
+
+SCOAI is the most common type. The top 7 types are all Agreeable and Imaginative.
+
+```{r graph of top 7 results, echo=FALSE}
+big_five_clean |>
+  group_by(big_five_type) |>
+  count() |>
+  arrange(desc(n)) |>
+  head(7) |>
+  ggplot(aes(reorder(big_five_type, -n), n, fill = big_five_type))  +
+  geom_col() +
+  scale_fill_brewer(palette = "Set2") +
+  xlab("Big Five Type") +
+  ylab("Number of Participants") +
+  ggtitle("Number of Participants by Big Five Type") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+I would like to see how the five means compare to each other. I predicted that the box of the boxplot would contain 3, as this is the neutral value in the scale. However, for Agreeableness and Openness, the median was closer to 4. This is also consistent with the previous plot, as the top 7 types were all Agreeable and Imaginative.
+
+```{r boxplots of each Big Five variable mean measures, echo=FALSE}
+big_five_clean |>
+  pivot_longer(cols = ext_mean:opn_mean,
+               names_to = "mean_type",
+               values_to = "mean_value") |>
+  ggplot(aes(mean_type, mean_value, fill = mean_type)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set3") +
+  xlab("Big Five Measurement") +
+  ylab("Scale Value") +
+  ggtitle("Boxplots for Big Five Measurements") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+Now, I want to create a series of plots comparing the Extroversion variable to the four other factors. For three of the plots, the high level of the trait was highest for both levels of Extroversion. However, for the Extroversion vs. Emotional Stability plot, the split seemed closer to 50-50; in addition, there was a Limbic majority for the Reserved level.
+
+``` {r ultimate comparison, echo=FALSE}
+ext_est_plot <- big_five_clean |>
+  ggplot(aes(ext_result, fill = est_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "BuPu") +
+  xlab("Extroversion Result") +
+  ylab("Emotional Stability Result (%)") +
+  ggtitle("Extroversion vs. Emotional Stability") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+ext_agr_plot <- big_five_clean |>
+  ggplot(aes(ext_result, fill = agr_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "GnBu") +
+  xlab("Extroversion Result") +
+  ylab("Agreeableness Result (%)") +
+  ggtitle("Extroversion vs. Agreeableness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+ext_csn_plot <- big_five_clean |>
+  ggplot(aes(ext_result, fill = csn_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "OrRd") +
+  xlab("Extroversion Result") +
+  ylab("Conscientiousness Result (%)") +
+  ggtitle("Extroversion vs. Conscientiousness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+ext_opn_plot <- big_five_clean |>
+  ggplot(aes(ext_result, fill = opn_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "PuRd") +
+  xlab("Extroversion Result") +
+  ylab("Openness Result (%)") +
+  ggtitle("Extroversion vs. Openness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+(ext_est_plot | ext_agr_plot) /
+(ext_csn_plot | ext_opn_plot)
+```
+
+## Some Closing Thoughts on The First Dataset
+
+Before starting this project, I knew from my psych classes that most people fall in the middle of the high and low levels of each Big Five trait. That's why I was surprised to see the results of my sample leaning toward the higher levels of each trait, except for Extroversion and Emotional Stability. I have considered some reasons for this finding. First, I always have to consider that this is due to chance because of my sample. However, I think there is a more plausible reason. When people take these quizzes, they may inaccurately judge themselves. They may choose answers that put them in a more favorable light; most people do not want to think they are low in a good quality. For example, there is a question in the quiz "I feel little concern for others." People may be hesitant to agree with this statement because it can be seen as being rude. This phenomenon may explain the high levels of Agreeableness, Openness, and Conscientiousness in this sample. Hang tight, we will return to this dataset after we clean our second dataset!
+
+## Let's Clean the Second Dataset!
+
+Reading the second dataset is much easier because it is a csv file I wrote and saved onto my computer. The main goal of cleaning this dataset is to make it more simplified. Many of the following tests I will introduce have complicated meanings behind each result, such as the position of letters, the meaning behind letter and number combinations, and many other definitions. I want to simplify the result to one meaning to make the analysis clearer.
+
+### MBTI
+
+In this step, I will be reading each character's MBTI type and returning their dominant function. What does this mean? Well, each of the 16 MBTI types has a dominant function, which is a trait that they use most frequently in their day-to-day life. There are 8 functions: Extroverted Sensing (Se), Introverted Sensing (Si), Extroverted Intuition (Ne), Introverted Intuition (Ni), Extroverted Thinking (Te), Introverted Thinking (Ti), Extroverted Feeling (Fe), and Introverted Feeling (Fi). As you can see, the first letter of the function refers to one of the four qualities (Sensing, Intuition, Thinking, Feeling), while the second letter refers to whether it is introverted or extroverted. The qualities are pretty self-explanatory; when a function is introverted it is focused inward in a person, and vice versa for extroverted functions. For example, someone with dominant Ne focuses their intuition on their environment and sees connections between people and ideas. In contrast, someone with dominant Ni focuses their intuition inside to understand the world for themselves. Here is a table of the 16 MBTI types and their corresponding dominant function:
+
+|Function|MBTI Types|
+|:--|:--|
+|Se|ESTP, ESFP|  
+|Si|ISTJ, ISFJ|  
+|Ne|ENTP, ENFP|  
+|Ni|INTJ, INFJ|
+|Te|ESTJ, ENTJ|  
+|Ti|INTP, ISTP|  
+|Fe|ESFJ, ENFJ|  
+|Fi|ISFP, INFP| 
+
+Each of the 16 MBTI types has a specific combination of functions that uniquely identify it. However, I decided to focus on the dominant function only in order to make it easier to understand and analyze. 
+
+```{r read and create `dominant_func_mbti` variable, echo=FALSE, message=FALSE}
+top_pdb <- vroom("Top250PDB.csv")
+
+# create variable `dominant_func_mbti` to correspond to each character
+top_pdb_clean <- top_pdb |>
+  mutate(dominant_func_mbti = case_when(
+    MBTI %in% c("ESTP","ESFP") ~ "Se",
+    MBTI %in% c("ISTJ","ISFJ") ~ "Si",
+    MBTI %in% c("ENTP","ENFP") ~ "Ne",
+    MBTI %in% c("INTJ","INFJ") ~ "Ni",
+    MBTI %in% c("ESTJ","ENTJ") ~ "Te",
+    MBTI %in% c("INTP","ISTP") ~ "Ti",
+    MBTI %in% c("ESFJ","ENFJ") ~ "Fe",
+    MBTI %in% c("ISFP","INFP") ~ "Fi"
+  )
+  )
+```
+
+### Enneagram
+
+Next, we will be cleaning up the Enneagram variable. There are 9 Enneagram types, numbered 1-9 (quite fittingly). There are many definitions for each Enneagram type, but the one I will be focusing on is fears. Each type has a unique set of fears that are common to the type. They can dictate the possible underlying meaning behind their behavior and thoughts. I will summarize them in the table below. Along with a main Enneagram type, there is a qualifier called a wing that gives extra detail. However, for my analysis, I will not be investigating the wings, so I will use a regular expression to only pick up the main Enneagram type.
+
+|Enneagram|Main Fear|
+|:--|:--|
+|1|Imperfection|  
+|2|Being Unlovable|  
+|3|Failure|  
+|4|Being Flawed|
+|5|Being Overwhelmed By Need|  
+|6|Danger|  
+|7|Emotional Pain|  
+|8|Being Powerless|
+|9|Pushing People Away|
+
+```{r clean `enneagram` variable, echo=FALSE}
+# clean variable `Enneagram` to be one number (no wing)
+top_pdb_clean <- top_pdb_clean |>
+  mutate(
+    enneagram = str_extract(Enneagram, "^[1-9]")
+  )
+```
+
+### Enneagram Triad Type
+
+Each Enneagram type also corresponds to one of the three parts of the body: the heart, head, or gut. This is referred to as the triad. Heart types tend to focus on emotion, while head types focus on thinking, and gut types focus on instinct. Here is a table describing each Enneagram types' triad type:
+
+|Enneagram|Triad Type|
+|:--|:--|
+|2, 3, 4|Heart|  
+|5, 6, 7|Head|  
+|8, 9, 1|Gut|  
+
+```{r create `enneagram_triad_type` variable, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  mutate(enneagram_triad_type = case_when(
+    enneagram %in% c("2", "3", "4") ~ "heart",
+    enneagram %in% c("5", "6", "7") ~ "head",
+    enneagram %in% c("8", "9", "1") ~ "gut"
+  )
+  )
+```
+
+### Instinctual Variant
+
+The next personality type to analyze is Instinctual Variant. This describes the root of people's actions. There are three Instinctual Variants: Social (so), Self-preservation (sp), and Sexual (sx). The Social type is about finding value in society and your place in it. The Self-preservation type is focused on the self. The Sexual type is focused on one-to-one relationships, such as friendships and romantic relationships. In the csv file, the Instinctual Variant is given in the form of two variants, such as "so/sx". The first variant is considered to be the strongest of the two. For this analysis, I will be filtering out the second variant and analysing the first variant only.
+
+```{r create `primary_instinct`, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  mutate(primary_instinct = case_when(
+    str_sub(Instinctual_Variant, 1, 2) == "so" ~ "social",
+    str_sub(Instinctual_Variant, 1, 2) == "sp" ~ "self-preservation",
+    str_sub(Instinctual_Variant, 1, 2) == "sx" ~ "sexual"
+  )
+  )
+```
+
+### Socionics
+
+Now, we will be cleaning the Socionics variable. Socionics is a personality test similar to MBTI, in that it is based on the same 8 functions. However, Socionics defines Thinking, Sensing, Feeling, and  Intuituion in slightly different terms, and the types are three-letter codes instead. Here, I will be extracting each character's leading (or strongest) Socionics function. Below is a table describing each types' leading function:
+
+|Function|Socionics Types|
+|:--|:--|
+|Se|SEE, SLE|  
+|Si|SEI, SLI|  
+|Ne|ILE, IEE|
+|Ni|IEI, ILI|  
+|Te|LSE, LIE|
+|Ti|LSI, LII|  
+|Fe|ESE, EIE| 
+|Fi|ESI, EII|
+
+```{r create variable `leading_func_soc`, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  mutate(leading_func_soc = case_when(
+    Socionics %in% c("LSI","LII") ~ "Ti",
+    Socionics %in% c("LSE","LIE") ~ "Te",
+    Socionics %in% c("SEI","SLI") ~ "Si",
+    Socionics %in% c("SEE","SLE") ~ "Se",
+    Socionics %in% c("ESI","EII") ~ "Fi",
+    Socionics %in% c("ESE","EIE") ~ "Fe",
+    Socionics %in% c("IEI","ILI") ~ "Ni",
+    Socionics %in% c("ILE","IEE") ~ "Ne"
+  )
+  )
+```
+
+### Attitudinal Psyche
+
+The next test is the Attitudinal Psyche test. The test focuses on the traits logic, emotion, volition, and physics (based on one's physical state and environment). The result is given in a four-letter code, such as ELVF or FLEV (with F standing for physics). The position of each trait gives insight on what trait a person uses the most. For example, someone with logic in the first position uses that trait more than some with logic in the third position. For this analysis, we will be extracting the first letter of the characters' four-letter type to get their conscious (dominant) Attitudinal Psyche function. 
+
+```{r create variable `conscious_func_att_psych`, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  mutate(conscious_func_att_psych = case_when(
+    str_detect(Attitudinal_Psyche, "^L") ~ "logic",
+    str_detect(Attitudinal_Psyche, "^E") ~ "emotion",
+    str_detect(Attitudinal_Psyche, "^V") ~ "volition",
+    str_detect(Attitudinal_Psyche, "^F") ~ "physics"
+  ))
+```
+
+### Temperament 
+Next, we will be cleaning the Temperament variable. This refers to the four temperaments: Sanguine (S), Melancholic (M), Choleric (C), and Phlegmatic (P). All four of these temperaments have corresponding traits, summarised below. Some characters are dominant in one temperament (having one letter such as "M") while some characters have a mixed temperament (having two letters such as "MP"). I will be extracting the first letter of each character's type, as it is the dominant one.
+
+|Temperament|Traits|
+|:--|:--|
+|Sanguine|Social, Optimistic|  
+|Melancholic|Analytical, Quiet|  
+|Choleric|Short-Tempered, Visionary|
+|Phlegmatic|Relaxed, Private|  
+
+```{r create variable `leading_temperament`, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  mutate(leading_temperament = case_when(
+    str_detect(Temperament, "^S") ~ "sanguine",
+    str_detect(Temperament, "^M") ~ "melancholic",
+    str_detect(Temperament, "^C") ~ "choleric",
+    str_detect(Temperament, "^P") ~ "phlegmatic"
+  ))
+```
+
+### Classic Jungian
+
+This is our last personality test to analyze! This is the Classic Jungian test, and it is similar to the MBTI and Socionics tests. It also deals with 8 functions based on Thinking, Feeling, Sensing, and Intuition, but defined slightly differently compared to the other two tests. Classic Jungian types are given in three-letter codes such as IS(F). For this type, it means that the dominant function is Si (Introverted Sensing), and the next strongest function is Feeling. For this project, I will be extracting the dominant function.
+
+```{r create variable dominant_func_classic, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  mutate(
+    dominant_func_classic = str_c(str_sub(Classic_Jungian, 2, 2), tolower(str_sub(Classic_Jungian, 1, 1)))
+  )
+```
+
+## Analyzing the Two Datasets Together
+
+After cleaning the dataset, let's drop the original columns and keep the cleaned ones. The Big Five column did not require cleaning, but it is still part of our cleaned dataset. We will also save it as a csv file.
+
+```{r rename, drop unneeded columns, and save clean csv, echo=FALSE}
+top_pdb_clean <- top_pdb_clean |>
+  rename(
+    big_five_type = Big_5,
+    character = Character
+  ) |>
+  select(character, big_five_type, dominant_func_mbti:dominant_func_classic)
+
+top_pdb_clean.csv <- write_csv(top_pdb_clean, "top_pdb_clean.csv")
+```
+
+It is time to prepare the second dataset to join with the first dataset in order to analyze the results. The first dataset has a column for each of the 5 traits, and it describes the result for each row, such as Reserved or Social. I want to have the same theme for the second dataset. I will do this by creating a data frame of all 32 Big Five types and the meanings behind that type (such as SCUEN is Social, Calm, Unorganized, Egocentric, Non-curious). I will get that data frame by making a copy of the `big_five_clean` data, deleting some columns, and adding some addition rows of missing Big Five types, as some of them were not present in the quiz results.
+
+```{r create df of Big 5 types and meaning of letters, echo=FALSE}
+big_five_details <- big_five_clean |>
+  select(
+    big_five_type, ext_result:opn_result
+  ) |>
+  filter(
+    str_detect(big_five_type, "X") == FALSE
+  ) |>
+  distinct(big_five_type, .keep_all = TRUE) |>
+# add missing types
+  add_row(big_five_type = "SCUEN", ext_result = "social", est_result = "calm",
+          csn_result = "unorganized", agr_result = "egocentric", opn_result = "non-curious") |>
+    add_row(big_five_type = "SLUEN", ext_result = "social", est_result = "limbic",
+          csn_result = "unorganized", agr_result = "egocentric", opn_result = "non-curious") |>
+    add_row(big_five_type = "SLOEN", ext_result = "social", est_result = "limbic",
+          csn_result = "organized", agr_result = "egocentric", opn_result = "non-curious")
+```
+
+Here we will join the data frame from above to the `top_pdb_clean` data frame, calling it `top_pdb_detailed`.
+
+```{r join `big_five_details` and `top_pdb_clean`, echo=FALSE, message=FALSE, results="hide", warning = FALSE}
+top_pdb_detailed <- top_pdb_clean |>
+  left_join(big_five_details, by = "big_five_type") |>
+  mutate(
+    sample_source = "pdb"
+  )
+
+top_pdb_detailed.csv <- write_csv(top_pdb_detailed, "top_pdb_detailed.csv")
+```
+
+Now, we can join the `big_five_clean` and `top_pdb_clean` datasets to create a new dataset, `big_five_samples`, with a new column including detailing the source of the data: the quiz or the pdb website.
+
+```{r make joined df, echo=FALSE, message = FALSE, warning = FALSE}
+big_five_samples <- big_five_clean |>
+  mutate(
+    sample_source = "quiz"
+  ) |>
+  full_join(top_pdb_detailed) |>
+  select(big_five_type, ext_result:sample_source)
+```
+
+Let's see what the top 7 most popular Big Five type for the PDB sample is. The most popular type is RCOAI, and all of the types are Imaginative. Surprisingly, there is a slight Social, Egocentric, and Calm majority.
+
+```{r see pdb highest values, echo=FALSE}
+big_five_samples |>
+  filter(
+    sample_source == "pdb"
+  ) |>
+  group_by(big_five_type) |>
+  count() |>
+  arrange(desc(n)) |>
+  head(7) |>
+  flextable()
+```
+Now, I want to make a plot comparing the two samples to each other. I will be doing this in the form of a stacked bar chart. From this chart, we can see that PDB has more Egocentric and Non-curious results compared to the quiz sample. 
+
+```{r plot compare both samples, echo=FALSE}
+big_five_samples |>
+  filter(
+    str_detect(big_five_type, "[X+]") == FALSE
+  ) |>
+  group_by(big_five_type, sample_source) |>
+  count() |>
+  arrange(desc(n)) |>
+  ggplot(aes(reorder(big_five_type, -n), n, fill = sample_source))  +
+  geom_col()+
+  scale_fill_brewer(palette = "Paired") +
+  xlab("Big Five Type") +
+  ylab("Number of Participants") +
+  ggtitle("Number of Participants by Big Five Type and Sample Source") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+The previous plot provided a nice introductory look at possible differences between the two samples, but I want to get more information. Let's make plots comparing the results of each of the five traits, for each sample.
+
+The results for Extroversion are pretty similar between the two samples. However, for Emotional Stability, the most dominant response is flipped: it is Calm for PDB, but Limbic for the quiz. Then, there's an interesting trend for Conscientiousness and Agreeableness. For PDB, the results are close to 50-50, but for the quiz, there is a clear majority for the Organized and Agreeable results. In terms of Openness, both have a Imaginative majority, but it is a much larger majority for the quiz results.
+
+```{r plot pdb vs. quiz for each Big Five characteristic, echo=FALSE}
+agr_comp_plot <- big_five_samples |>
+  ggplot(aes(agr_result, fill = agr_result)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Dark2") +
+  xlab("Agreeableness Result") +
+  ylab("Amount of Participants") +
+  ggtitle("Agreeableness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.position = "none") +
+  theme(axis.title.y = element_text(size = 7)) +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.text.x = element_text(size = 7)) +
+  facet_wrap(~ sample_source)
+
+opn_comp_plot <- big_five_samples |>
+  ggplot(aes(opn_result, fill = opn_result)) +
+  geom_bar() +
+  scale_x_discrete(labels=c('imag.', 'unimag.', 'x')) +
+  scale_fill_brewer(palette = "Set1") +
+  xlab("Openness Result") +
+  ylab("Amount of Participants") +
+  ggtitle("Openness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.position = "none") +
+  theme(axis.title.y = element_text(size = 7)) +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.text.x = element_text(size = 7)) +
+  facet_wrap(~ sample_source)
+
+ext_comp_plot <- big_five_samples |>
+  ggplot(aes(ext_result, fill = ext_result)) +
+  geom_bar() +
+  scale_x_discrete(labels=c('res.', 'social', 'x')) +
+  scale_fill_brewer(palette = "Set3") +
+  xlab("Extroversion Result") +
+  ylab("Amount of Participants") +
+  ggtitle("Extroversion") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.position = "none") +
+  theme(axis.title.y = element_text(size = 7)) +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.text.x = element_text(size = 7)) +
+  facet_wrap(~ sample_source)
+
+est_comp_plot <- big_five_samples |>
+  ggplot(aes(est_result, fill = est_result)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Accent") +
+  xlab("Emotional Stability Result") +
+  ylab("Amount of Participants") +
+  ggtitle("Emotional Stability") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.position = "none") +
+  theme(axis.title.y = element_text(size = 7)) +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.text.x = element_text(size = 7)) +
+  facet_wrap(~ sample_source)
+
+csn_comp_plot <- big_five_samples |>
+  ggplot(aes(csn_result, fill = csn_result)) +
+  geom_bar() +
+  scale_x_discrete(labels=c('org.', 'unorg.', 'x')) +
+  xlab("Conscientiousness Result") +
+  ylab("Amount of Participants") +
+  ggtitle("Conscientiousness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.position = "none") +
+  theme(axis.title.y = element_text(size = 7)) +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.text.x = element_text(size = 7)) +
+  facet_wrap(~ sample_source)
+
+(ext_comp_plot | est_comp_plot | csn_comp_plot) /
+  (agr_comp_plot | opn_comp_plot)
+```
+
+Let's make the same plot for PDB as we have made for the quiz data, where we compare Extroversion to the other four traits. This set of plots seems to be more evenly balanced, with no super strong majorities as we have seen for the quiz results comparing Agreeableness, Conscientiousness, and Openness. I would like to note that high Extroversion (Social) has a higher Unorganized result, compared to the quiz data where the Organized result was high for both levels of Extroversion. 
+
+```{r pdb ultimate comparison, echo=FALSE}
+pdb_ext_est_plot <- big_five_samples |>
+  filter(
+    sample_source == "pdb"
+  ) |>
+  ggplot(aes(ext_result, fill = est_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "BuPu") +
+  xlab("Extroversion Result") +
+  ylab("Emotional Stability Result (%)") +
+  ggtitle("Extroversion vs. Emotional Stability") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+pdb_ext_agr_plot <- big_five_samples |>
+  filter(
+    sample_source == "pdb"
+  ) |>
+  ggplot(aes(ext_result, fill = agr_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "GnBu") +
+  xlab("Extroversion Result") +
+  ylab("Agreeableness Result (%)") +
+  ggtitle("Extroversion vs. Agreeableness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+pdb_ext_csn_plot <- big_five_samples |>
+  filter(
+    sample_source == "pdb"
+  ) |>
+  ggplot(aes(ext_result, fill = csn_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "OrRd") +
+  xlab("Extroversion Result") +
+  ylab("Conscientiousness Result (%)") +
+  ggtitle("Extroversion vs. Conscientiousness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+pdb_ext_opn_plot <- big_five_samples |>
+  filter(
+    sample_source == "pdb"
+  ) |>
+  ggplot(aes(ext_result, fill = opn_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "PuRd") +
+  xlab("Extroversion Result") +
+  ylab("Openness Result (%)") +
+  ggtitle("Extroversion vs. Openness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+(pdb_ext_est_plot | pdb_ext_agr_plot) /
+(pdb_ext_csn_plot | pdb_ext_opn_plot)
+```
+
+## Some Closing Thoughts on the Two Sample Comparison
+
+There are some clear differences between the results of the two samples. Those differences are especially clear when we look at the Conscientiousness, Agreeableness, and Openness variables. What could be causing these differences?
+
+I think that the main factor is the difference between judging yourself for a quiz compared to analyzing a fictional character. As I mentioned before, people may answer more favorable choices when taking a quiz for themselves. However, when analyzing a fictional character, people can be more honest and critical. They often want to do so in order to get a more accurate picture of the character.
+
+Another factor could be that people in real life act more socially favorable compared to fictional characters. People face repercussions for their actions in real life. However, fictional characters act a certain way in order to play their role in a story. This may include being a villain or criminal. I think that both of these factors are important to consider when analyzing the differences between the two samples.
+
+Now that we have seen the differences between the two datasets, let's analyze how other personality tests compare to the Big Five Test.
+
+## PDB Dataset Analysis
+
+In the following plots, I will be comparing the other personality tests to one of the five Big Five personality traits. I chose the Big Five trait to compare the other tests to based on what I know about the tests.
+
+Our first comparison will be between the Extroversion trait of the Big Five Test and the MBTI, Socionics, and Classic Jungian Tests. I made this comparison because all three of those tests focus on 8 functions, which are separated by Introverted and Extroverted characteristics. With these plots, I hope to see that Big 5 Extroversion will be high for the Extroverted functions, and low for the Introverted functions. 
+
+Luckily, that is exactly what we have! Even though these three are different tests, the same trend is seen. This suggests a strong relationship between Big 5 Extroversion and these three tests' functions.
+
+```{r pdb ext vs. mbti, socionics, classic jungian, echo=FALSE}
+pdb_ext_mbti_plot <- top_pdb_detailed |>
+  ggplot(aes(dominant_func_mbti, fill = ext_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "Reds") +
+  xlab("MBTI Dominant Function") +
+  ylab("Extroversion Result (%)") +
+  ggtitle("MBTI Dominant Function") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+pdb_ext_soc_plot <- top_pdb_detailed |>
+  ggplot(aes(leading_func_soc, fill = ext_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "Greens") +
+  xlab("Socionics Leading Function") +
+  ylab("Extroversion Result (%)") +
+  ggtitle("Socionics Leading Function") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+pdb_ext_classic_plot <- top_pdb_detailed |>
+  ggplot(aes(dominant_func_classic, fill = ext_result)) +
+  geom_bar(position= "fill") +
+  scale_fill_brewer(palette = "Blues") +
+  xlab("Classic Dominant Function") +
+  ylab("Extroversion Result (%)") +
+  ggtitle("Classic Dominant Function") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+  theme(legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.5, 'cm')) +
+  theme(axis.title.y = element_text(size = 7))
+
+(pdb_ext_mbti_plot | pdb_ext_soc_plot) /
+(pdb_ext_classic_plot)
+```
+
+Next, I want to analyze Emotional Stability versus the Enneagram Triad type. I want to make this comparison because I have some hypotheses for what the relationship could be. For example, I think that the Heart triad would be Limbic, and the Head triad would be Calm.
+
+When we make the graph, my hypotheses seem to have some merit. I was not sure what to think about the Gut triad, but it has a higher Calm response compared to the Head triad.
+
+```{r pdb enneagram triad vs. est, echo=FALSE}
+top_pdb_detailed |>
+  ggplot(aes(enneagram_triad_type, fill=est_result)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "PuRd") +
+  xlab("Enneagram Triad Type") +
+  ylab("Emotional Stability Result (%)") +
+  ggtitle("Enneagram Triad vs. Emotional Stability") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+Now, I want to see the relationship between Agreeableness and primary instinctual variant. I made this comparison because the self-preservation variant makes me think of a possible Egocentric result in the Big Five.
+
+However, for self-preservation, there is a 50-50 split between Agreeable and Egocentric results. In addition, the sexual instinct had a higher rate of Egocentric values, while the social instinct had a higher rate of Agreeable values. This makes sense because pro-social behaviors often involve being agreeable towards others. 
+
+```{r pdb primary instinct vs. agr, echo=FALSE}
+top_pdb_detailed |>
+  ggplot(aes(primary_instinct, fill=agr_result)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "BuGn") +
+  xlab("Primary Instinct Type") +
+  ylab("Agreeableness Result (%)") +
+  ggtitle("Primary Instinct vs. Agreeableness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+For the next plot, I want to see how Enneagram types are connected to Openness trait. Enneagram 6 is concerned with staying away from danger, so that makes me think this enneagram type would be Non-curious.
+
+My prediction was off for Enneagram 6. Most of the enneagram types have an Imaginative majority. Enneagrams 8 and 9 have a slight Non-curious majority. Enneagram 8 is concerned with power, and Enneagram 9 values cohesion with others, so I can see how they have the Non-curious majority. 
+
+```{r pdb enneagram vs. opn, echo=FALSE}
+top_pdb_detailed |>
+  ggplot(aes(enneagram, fill=opn_result)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "YlGn") +
+  xlab("Enneagram Type") +
+  ylab("Openness Result (%)") +
+  ggtitle("Enneagram vs. Openness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+Now, I want to compare Attitudinal Psyche to Conscientiousness. I can see how someone with Conscious Volition would possibly have an Organized result in the Big Five.
+
+Conscious Logic and Volition have a higher Organized result, while Conscious Emotion and Physics have a higher Unorganized result.
+
+```{r pdb attitudinal psyche vs. csn, echo=FALSE}
+top_pdb_detailed |>
+  ggplot(aes(conscious_func_att_psych, fill=csn_result)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "OrRd") +
+  xlab("Conscious Attitudinal Psyche Function") +
+  ylab("Conscientiousness Result (%)") +
+  ggtitle("Attitudinal Psyche vs. Conscientiousness") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+Here is our last plot of this project! Let's see how Temperaments relate to Emotional Stability in the Big Five. I think that a Phlegmatic temperament would be Calm, while a Choleric temperament would be Limbic.
+
+My thinking was correct for the Phlegmatic and Choleric temperaments. The Sanguine temperament was also Calm, while the Melancholic temperament is about 50-50. 
+
+```{r pdb temperament vs. est, echo=FALSE}
+top_pdb_detailed |>
+  ggplot(aes(leading_temperament, fill=est_result)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "BuPu") +
+  xlab("Leading Temperament Type") +
+  ylab("Emotional Stability Result (%)") +
+  ggtitle("Leading Temperament vs. Emotional Stability") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  )
+```
+
+## Conclusion
+
+I have learned a lot of information about multiple personality tests and how they relate to each other. In the future, I may investigate the parts of the tests that I did not explore here. Also, building a Shiny app may be a good alternative to simply having code that prints out graphs. I may also look for a dataset that gives more numerical results so that I can do some statistical tests for correlation or relationships, and have different types of graphs. 
+
+I had fun doing this project, and I hope you enjoyed learning about different personality tests. I know they can seem a bit astrology-adjacent, but I appreciate how they can give insight about yourself and opportunities for self-improvement. Thank you for a wonderful semester!
+
+On my honor, I have neither received nor given any unauthorized assistance on this assignment.  
+Name 
